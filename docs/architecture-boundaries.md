@@ -51,7 +51,7 @@ Simulated values must be labeled in the experience or demo narrative and must no
 
 - **Human publication control:** GPT-5.6 cannot publish a campaign; explicit merchant approval is required.
 - **Coordinate integrity:** GPT-5.6 cannot select or change authoritative venue coordinates.
-- **Presence integrity:** GPT-5.6 cannot Determine physical presence as a source of truth. Prototype location and distance are simulated.
+- **Presence integrity:** GPT-5.6 cannot determine physical presence as a source of truth. Prototype location and distance are simulated.
 - **Redemption integrity:** GPT-5.6 cannot validate redemption codes or override expiration and single-use rules.
 - **Inventory integrity:** GPT-5.6 cannot control reward supply or merchant inventory state.
 - **Analytics integrity:** GPT-5.6 cannot fabricate events, metrics, activity, or scarcity.
