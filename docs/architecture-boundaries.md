@@ -4,6 +4,8 @@
 
 The prototype must separate probabilistic GPT-5.6 assistance from deterministic campaign, claim, redemption, and measurement state. Human approval is the boundary between an AI-generated proposal and publication. This architecture applies only to the independent Build Week prototype and does not define or modify the contractual PINTAG MVP.
 
+Azure OpenAI through Microsoft Foundry is the active optional provider target. The server-side model identifier is `gpt-5.6-sol`, and the intended Azure deployment is `pintag-gpt-5-6-sol`. Azure quota remains externally controlled, and a successful live call has not yet been verified.
+
 ## GPT-5.6 responsibilities
 
 GPT-5.6 is responsible for:
@@ -15,6 +17,8 @@ GPT-5.6 is responsible for:
 - Generating a short campaign-performance insight grounded in supplied metrics.
 
 GPT-5.6 output is advisory. It must be validated against the expected structure and presented for human review before it can affect publishable campaign content.
+
+Credentials, endpoint configuration, deployment metadata, prompts, and provider errors remain server-side. No Azure credential is stored in Git or returned to the browser.
 
 ## Deterministic system responsibilities
 
@@ -73,7 +77,7 @@ Simulated values must be labeled in the experience or demo narrative and must no
 
 ### Campaign generation failure
 
-If GPT-5.6 is unavailable, times out, returns invalid structured output, or omits required information, the system must not publish. It should preserve the merchant's input, explain that no valid proposal was produced, and allow a retry.
+If Azure OpenAI is unconfigured, unavailable, quota-limited, missing its deployment, times out, returns invalid structured output, or omits required information, the system must use the labeled deterministic campaign fallback. The fallback preserves the complete demo but does not imply that GPT-5.6 generated it. Human approval remains required.
 
 ### Ambiguous or incomplete proposal
 
@@ -97,7 +101,15 @@ Invalid, expired, or previously used codes must be rejected deterministically. G
 
 ### Analytics or insight failure
 
-Metrics must remain available when GPT-5.6 insight generation fails. The interface should show deterministic metrics, omit the AI insight, and offer a retry without inventing a fallback narrative.
+Metrics must remain available when GPT-5.6 insight generation fails. The interface shows deterministic metrics and may show a labeled deterministic insight derived only from those metrics. It must not fabricate historical activity or causal sales impact.
+
+## Provider boundary
+
+- Azure OpenAI uses server-side Next.js route handlers and the official `openai` SDK against the Azure OpenAI v1 endpoint.
+- `AZURE_OPENAI_API_KEY` is read only in the server-only provider module.
+- The browser receives validated campaign or insight fields, `sourceMode`, and a safe notice; it never receives credentials, raw errors, endpoints, subscription identifiers, or deployment metadata.
+- Publication, reward inventory, claims, redemption codes, redemption validation, funnel events, and campaign metrics remain deterministic.
+- The deterministic fallback is the verified default while Azure quota approval and live deployment verification remain pending.
 
 ## Explicit exclusions
 

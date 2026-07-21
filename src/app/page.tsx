@@ -3,6 +3,11 @@
 import { useMemo, useState } from "react";
 
 import { DemoProgress } from "@/components/demo-progress";
+import type {
+  AISourceMode,
+  CampaignGenerationResponse,
+  InsightResponse,
+} from "@/lib/ai-types";
 import {
   DEMO_CAMPAIGN,
   DEMO_DISTANCE,
@@ -25,6 +30,7 @@ import type {
 const roles: Role[] = ["Merchant", "Consumer", "Redemption"];
 
 type Notice = { tone: "success" | "error" | "info"; text: string } | null;
+type RequestState = "idle" | "loading" | "success" | "fallback" | "error";
 
 type MerchantViewProps = {
   merchantInput: string;
@@ -32,6 +38,8 @@ type MerchantViewProps = {
   campaignStatus: CampaignStatus;
   remainingSupply: number;
   notice: Notice;
+  requestState: RequestState;
+  sourceMode: AISourceMode | null;
   onInputChange: (value: string) => void;
   onGenerate: () => void;
   onProposalChange: (proposal: CampaignProposal) => void;
@@ -57,6 +65,8 @@ function MerchantView({
   campaignStatus,
   remainingSupply,
   notice,
+  requestState,
+  sourceMode,
   onInputChange,
   onGenerate,
   onProposalChange,
@@ -69,8 +79,9 @@ function MerchantView({
           <p className="eyebrow">Merchant workspace</p>
           <h1 id="merchant-heading">Compose, review, then publish.</h1>
           <p className="intro-copy">
-            This deterministic demo keeps every campaign decision visible and
-            under human control while GPT-5.6 integration remains pending.
+            Azure OpenAI can propose the campaign when available. Deterministic
+            fallback keeps the demo complete, and publication always requires
+            human approval.
           </p>
         </div>
 
@@ -120,19 +131,24 @@ function MerchantView({
               className="primary-button"
               type="button"
               onClick={onGenerate}
-              disabled={campaignStatus === "published"}
+              disabled={campaignStatus === "published" || requestState === "loading"}
             >
-              Generate spatial campaign <span aria-hidden="true">→</span>
+              {requestState === "loading" ? "Generating campaign…" : "Generate spatial campaign"}
+              {requestState !== "loading" && <span aria-hidden="true">→</span>}
             </button>
           </div>
 
           <aside className="integration-note">
             <span className="status-dot" aria-hidden="true" />
             <div>
-              <strong>Deterministic generator active</strong>
+              <strong>
+                {requestState === "loading"
+                  ? "Requesting an optional Azure OpenAI proposal"
+                  : "Production-safe fallback enabled"}
+              </strong>
               <p>
-                No AI call occurs. The button loads the approved demo campaign
-                structure for human review.
+                Credentials remain server-side. If Azure quota, deployment, or
+                credentials are unavailable, the deterministic campaign is used.
               </p>
             </div>
           </aside>
@@ -151,8 +167,12 @@ function MerchantView({
                 <p className="eyebrow">2 · Human review</p>
                 <h2>Campaign proposal</h2>
               </div>
-              <span className="demo-structure-badge">
-                Demo campaign structure — GPT-5.6 integration pending
+              <span className={`demo-structure-badge ${sourceMode === "azure-gpt-5.6" ? "live" : "fallback"}`}>
+                {sourceMode === "azure-gpt-5.6"
+                  ? "Generated live with GPT-5.6 through Azure OpenAI"
+                  : requestState === "error"
+                    ? "AI request unavailable — deterministic campaign preserved"
+                    : "Deterministic fallback — Azure model unavailable"}
               </span>
             </div>
 
@@ -507,9 +527,15 @@ function RedemptionView({
 function SessionAnalytics({
   metrics,
   events,
+  insight,
+  requestState,
+  onGenerateInsight,
 }: {
   metrics: ReturnType<typeof calculateAnalytics>;
   events: FunnelEvent[];
+  insight: InsightResponse | null;
+  requestState: RequestState;
+  onGenerateInsight: () => void;
 }) {
   const cards = [
     ["Publications", metrics.publications],
@@ -527,7 +553,12 @@ function SessionAnalytics({
           <p className="eyebrow">6 · Measure</p>
           <h2 id="analytics-heading">Prototype session events</h2>
         </div>
-        <span>{events.length} events recorded</span>
+        <div className="analytics-actions">
+          <span>{events.length} events recorded</span>
+          <button type="button" onClick={onGenerateInsight} disabled={requestState === "loading"}>
+            {requestState === "loading" ? "Generating insight…" : "Generate campaign insight"}
+          </button>
+        </div>
       </div>
       <div className="metrics-grid">
         {cards.map(([label, value]) => (
@@ -544,6 +575,32 @@ function SessionAnalytics({
           <p>No historical activity is fabricated. Complete the demo to record session events.</p>
         )}
       </div>
+      {insight && (
+        <article className="insight-card" aria-live="polite">
+          <div className="insight-heading">
+            <div>
+              <span>Campaign insight</span>
+              <h3>{insight.summary}</h3>
+            </div>
+            <strong className={insight.sourceMode === "azure-gpt-5.6" ? "live" : "fallback"}>
+              {insight.sourceMode === "azure-gpt-5.6"
+                ? "Generated live with GPT-5.6 through Azure OpenAI"
+                : "Deterministic fallback — Azure model unavailable"}
+            </strong>
+          </div>
+          <dl>
+            <div><dt>Observation</dt><dd>{insight.observation}</dd></div>
+            <div><dt>Recommendation</dt><dd>{insight.recommendation}</dd></div>
+            <div><dt>Limitation</dt><dd>{insight.limitation}</dd></div>
+          </dl>
+          <p>{insight.notice}</p>
+        </article>
+      )}
+      {requestState === "error" && (
+        <p className="insight-error" role="status">
+          AI request unavailable — deterministic metrics preserved
+        </p>
+      )}
     </section>
   );
 }
@@ -560,6 +617,10 @@ export default function Home() {
   const [redemptionStatus, setRedemptionStatus] = useState<RedemptionStatus>("idle");
   const [events, setEvents] = useState<FunnelEvent[]>([]);
   const [isPintagOpen, setIsPintagOpen] = useState(false);
+  const [campaignRequestState, setCampaignRequestState] = useState<RequestState>("idle");
+  const [campaignSourceMode, setCampaignSourceMode] = useState<AISourceMode | null>(null);
+  const [insight, setInsight] = useState<InsightResponse | null>(null);
+  const [insightRequestState, setInsightRequestState] = useState<RequestState>("idle");
   const [notices, setNotices] = useState<Record<Role, Notice>>({
     Merchant: null,
     Consumer: null,
@@ -600,19 +661,92 @@ export default function Home() {
     setNotices((current) => ({ ...current, [role]: notice }));
   }
 
-  function generateCampaign() {
+  async function generateCampaign() {
     if (campaignStatus === "published") {
       setNotice("Merchant", { tone: "error", text: "Reset the demo before generating another campaign." });
       return;
     }
-    setProposal({ ...DEMO_CAMPAIGN });
-    setCampaignStatus("review");
-    setRemainingSupply(DEMO_CAMPAIGN.rewardSupply);
-    setNotice("Merchant", {
-      tone: "info",
-      text: "Deterministic demo structure created. Review every field before publication.",
-    });
-    recordEvent("campaign_generated");
+    if (!merchantInput.trim()) {
+      setNotice("Merchant", { tone: "error", text: "Enter a merchant need before generating a campaign." });
+      return;
+    }
+
+    setCampaignRequestState("loading");
+    setNotice("Merchant", { tone: "info", text: "Preparing a structured campaign proposal…" });
+
+    try {
+      const response = await fetch("/api/generate-campaign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchantNeed: merchantInput,
+          venue: DEMO_CAMPAIGN.venue,
+          defaultSupply: DEMO_CAMPAIGN.rewardSupply,
+          defaultStartTime: DEMO_CAMPAIGN.startTime,
+          defaultEndTime: DEMO_CAMPAIGN.expirationTime,
+          defaultRadiusMeters: DEMO_CAMPAIGN.discoveryRadius,
+        }),
+      });
+      if (!response.ok) throw new Error("Campaign request rejected");
+
+      const result = (await response.json()) as CampaignGenerationResponse;
+      setProposal({
+        title: result.title,
+        description: result.description,
+        venue: DEMO_CAMPAIGN.venue,
+        startTime: result.startTime,
+        expirationTime: result.endTime,
+        rewardSupply: result.supply,
+        reward: result.reward,
+        discoveryRadius: result.discoveryRadiusMeters,
+        primaryMetric: result.primaryMetric,
+      });
+      setCampaignStatus("review");
+      setRemainingSupply(result.supply);
+      setCampaignSourceMode(result.sourceMode);
+      setCampaignRequestState(result.sourceMode === "azure-gpt-5.6" ? "success" : "fallback");
+      setNotice("Merchant", {
+        tone: result.sourceMode === "azure-gpt-5.6" ? "success" : "info",
+        text: result.notice,
+      });
+      recordEvent("campaign_generated");
+    } catch {
+      setProposal({ ...DEMO_CAMPAIGN });
+      setCampaignStatus("review");
+      setRemainingSupply(DEMO_CAMPAIGN.rewardSupply);
+      setCampaignSourceMode("deterministic-fallback");
+      setCampaignRequestState("error");
+      setNotice("Merchant", {
+        tone: "error",
+        text: "AI request unavailable — deterministic campaign preserved",
+      });
+      recordEvent("campaign_generated");
+    }
+  }
+
+  async function generateInsight() {
+    setInsightRequestState("loading");
+    try {
+      const response = await fetch("/api/generate-insight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publications: analytics.publications,
+          detailViews: analytics.pintagViews,
+          claims: analytics.claims,
+          redemptions: analytics.redemptions,
+          remainingSupply: analytics.remainingSupply,
+          claimToRedemptionRate: analytics.claimToRedemptionRate,
+          includesSimulatedData: true,
+        }),
+      });
+      if (!response.ok) throw new Error("Insight request rejected");
+      const result = (await response.json()) as InsightResponse;
+      setInsight(result);
+      setInsightRequestState(result.sourceMode === "azure-gpt-5.6" ? "success" : "fallback");
+    } catch {
+      setInsightRequestState("error");
+    }
   }
 
   function publishCampaign() {
@@ -673,6 +807,10 @@ export default function Home() {
     setRedemptionStatus("idle");
     setEvents([]);
     setIsPintagOpen(false);
+    setCampaignRequestState("idle");
+    setCampaignSourceMode(null);
+    setInsight(null);
+    setInsightRequestState("idle");
     setNotices({ Merchant: null, Consumer: null, Redemption: null });
   }
 
@@ -716,6 +854,8 @@ export default function Home() {
             campaignStatus={campaignStatus}
             remainingSupply={remainingSupply}
             notice={notices.Merchant}
+            requestState={campaignRequestState}
+            sourceMode={campaignSourceMode}
             onInputChange={setMerchantInput}
             onGenerate={generateCampaign}
             onProposalChange={setProposal}
@@ -748,11 +888,17 @@ export default function Home() {
         )}
       </main>
 
-      <SessionAnalytics metrics={analytics} events={events} />
+      <SessionAnalytics
+        metrics={analytics}
+        events={events}
+        insight={insight}
+        requestState={insightRequestState}
+        onGenerateInsight={generateInsight}
+      />
 
       <footer className="site-footer">
         <p>Independent Build Week prototype · Separate from the contractual PINTAG MVP</p>
-        <p>Simulated identities and location data · No external services</p>
+        <p>Simulated identities and location data · Optional server-side Azure OpenAI</p>
       </footer>
     </div>
   );
