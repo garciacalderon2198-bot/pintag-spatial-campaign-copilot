@@ -25,6 +25,8 @@ These concepts are not being presented as work created during Build Week.
 
 The repository now contains a responsive Next.js prototype with a deterministic end-to-end campaign flow, typed in-memory state, human approval, simulated spatial discovery, single-use claim and redemption rules, prototype session events, and aggregate analytics.
 
+The Golden Pintag Drop extension adds a second activation mode on the same engine: deterministic activation recommendation, a fixed approved Drop Zone catalog, mandatory human Drop Zone selection, a distinct Sponsor Venue, simulated map/travel/proximity/WebAR states, positive post-claim messaging, and Golden funnel events. All location, movement, search, identity, safety, and permission behavior remains explicitly simulated or pending real-world review.
+
 An optional server-side Azure OpenAI integration layer targets `gpt-5.6-sol` through the intended Microsoft Foundry deployment `pintag-gpt-5-6-sol`. The integration validates structured campaign and insight responses and falls back deterministically when Azure is not configured or available.
 
 ## Codex contribution log
@@ -47,12 +49,12 @@ The public deployment currently uses the clearly labeled deterministic fallback 
 
 ## Testing evidence
 
-Automated tests cover pre-publication claim rejection, single decrement of reward supply, single-use redemption, invalid redemption rejection, missing-Azure fallback, timeout fallback, invalid-model-output fallback, source labeling, secret non-disclosure, raw-error suppression, and invalid AI-route input.
+Automated tests cover pre-publication claim rejection, single decrement of reward supply, single-use redemption, invalid redemption rejection, activation recommendation and override, approved Drop Zone controls, Golden search transitions, missing-Azure fallback, timeout fallback, invalid-model-output fallback, source labeling, secret non-disclosure, raw-error suppression, and invalid AI-route input.
 
 Final validation results:
 
 - `npm run lint` passes.
-- All 10 automated tests pass.
+- All 26 automated tests pass.
 - `npm run build` passes.
 - The complete public deterministic fallback flow has been verified.
 - No `.env.local`, credentials, real Azure endpoints, subscription IDs, resource IDs, or secrets are stored in Git.

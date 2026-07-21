@@ -96,5 +96,7 @@ export function calculateAnalytics(
     claimToRedemptionRate:
       claims === 0 ? 0 : Math.round((redemptions / claims) * 100),
     remainingSupply,
+    goldenSearchesStarted: count("golden_search_started"),
+    goldenPintagsFound: count("golden_pintag_found"),
   };
 }

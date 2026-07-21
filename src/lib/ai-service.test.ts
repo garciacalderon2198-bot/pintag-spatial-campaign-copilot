@@ -6,14 +6,8 @@ import {
   generateInsightWithFallback,
   type AIProvider,
 } from "./ai-service.ts";
-import type {
-  CampaignGenerationInput,
-  InsightInput,
-} from "./ai-types.ts";
-import {
-  validateCampaignInput,
-  validateInsightInput,
-} from "./ai-types.ts";
+import type { CampaignGenerationInput, InsightInput } from "./ai-types.ts";
+import { validateCampaignInput, validateInsightInput } from "./ai-types.ts";
 import { createAzureOpenAIProvider } from "./azure-openai-client.ts";
 
 const campaignInput: CampaignGenerationInput = {
@@ -24,9 +18,15 @@ const campaignInput: CampaignGenerationInput = {
   defaultStartTime: "15:00",
   defaultEndTime: "17:00",
   defaultRadiusMeters: 500,
+  activationPreference: "recommend",
 };
 
 const insightInput: InsightInput = {
+  activationType: "real-time-offer",
+  dropZone: null,
+  sponsorVenue: "Homers Café — South Machala",
+  searchesStarted: 0,
+  goldenPintagsFound: 0,
   publications: 1,
   detailViews: 1,
   claims: 1,
@@ -44,7 +44,9 @@ function withoutAzureEnvironment<T>(operation: () => T): T {
     "AZURE_OPENAI_MODEL",
     "AZURE_OPENAI_TIMEOUT_MS",
   ] as const;
-  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  const previous = Object.fromEntries(
+    names.map((name) => [name, process.env[name]]),
+  );
   for (const name of names) delete process.env[name];
   try {
     return operation();

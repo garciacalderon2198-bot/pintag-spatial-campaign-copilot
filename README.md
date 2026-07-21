@@ -12,6 +12,15 @@ Local businesses often have temporary inventory, unused capacity, or time-sensit
 
 PINTAG Spatial Campaign Copilot is designed to use GPT-5.6 to structure a merchant need as a spatial campaign, keep publication under human control, and support discovery, claim, redemption, and campaign insight in one demonstrable workflow.
 
+PINTAG helps local businesses turn nearby attention into measurable store visits through real-time spatial offers and gamified sponsored rewards. The AI Copilot is the merchant recommendation and structuring tool; the product is the shared spatial campaign and action infrastructure.
+
+## Activation modes
+
+- **Real-time Offer:** discovery and redemption occur at the Sponsor Venue, supporting temporary inventory, unused capacity, and short operating windows.
+- **Golden Pintag Drop:** discovery and simulated search occur at a human-selected approved public Drop Zone, while deterministic redemption occurs later at the distinct Sponsor Venue.
+
+Both modes reuse human approval, publication, time windows, inventory, claim, single-use redemption, prototype events, and analytics. Golden mode adds a simulated 2D map, simulated arrival and proximity, a CSS-only simulated WebAR search, and a positive public post-claim state. No real geolocation, camera access, presence verification, safety verification, permission claim, sales effect, or CAC result is provided.
+
 ## Why Work & Productivity
 
 The prototype helps merchants turn an operational need into an actionable local campaign, reduces campaign setup effort, and keeps staff-facing publication and redemption steps clear and measurable.
@@ -22,7 +31,7 @@ Merchant need → campaign proposal → human review → publication → consume
 
 ## What GPT-5.6 does
 
-When the Azure provider is available, GPT-5.6 may interpret the merchant need, propose structured campaign copy, identify missing or ambiguous information, recommend a primary metric, and generate an aggregate performance insight. It cannot publish campaigns, determine physical presence, control inventory, validate redemption, fabricate activity, or claim causal sales impact.
+When the Azure provider is available, GPT-5.6 may interpret the merchant need, recommend one of the two activation modes, rank only the approved Drop Zone catalog, propose structured campaign copy, identify missing or ambiguous information, recommend a primary metric, and generate an aggregate performance insight. It cannot invent coordinates, publish campaigns, determine physical presence, verify safety or permission, control inventory, validate redemption, fabricate activity, or claim causal sales impact or proven CAC reduction.
 
 ## What remains deterministic
 
@@ -81,10 +90,10 @@ AZURE_OPENAI_TIMEOUT_MS=15000
 ## Testing and validation
 
 - `npm run lint` passes.
-- All 10 automated tests pass.
+- All 26 automated tests pass.
 - `npm run build` passes.
 - The complete public deterministic fallback flow has been verified.
-- Tests cover fallback source labeling, invalid input, provider failure and timeout, pre-publication claim rejection, single supply decrement, single-use redemption, and invalid-code rejection.
+- Tests cover fallback source labeling, invalid input, provider failure and timeout, activation recommendation and override, approved Drop Zone controls, Golden search transitions, pre-publication claim rejection, single supply decrement, single-use redemption, and invalid-code rejection.
 
 ## Security and trust boundaries
 
@@ -96,7 +105,7 @@ AZURE_OPENAI_TIMEOUT_MS=15000
 
 ## Simulated prototype elements
 
-Merchant and consumer identities, user and venue locations, nearby distance, initial campaign context, and the map environment are simulated and labeled in the interface. Metrics represent only events generated during the current prototype session; no historical activity is fabricated.
+Merchant and consumer identities, user, Drop Zone and Sponsor Venue locations, nearby distance, movement, proximity, WebAR search, initial campaign context, and the map environment are simulated and labeled in the interface. The approved Drop Zone catalog is a prototype constraint and does not establish current real-world safety, traffic, permission, availability, or legal authorization. Metrics represent only events generated during the current prototype session; no historical activity is fabricated.
 
 ## Build Week development history
 

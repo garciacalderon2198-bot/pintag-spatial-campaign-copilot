@@ -18,6 +18,13 @@ const campaignSchema = {
   type: "object",
   additionalProperties: false,
   required: [
+    "activationType",
+    "activationReason",
+    "sponsorName",
+    "sponsorVenue",
+    "recommendedDropZoneIds",
+    "selectedDropZoneId",
+    "claimRedemptionWindowHours",
     "objective",
     "title",
     "description",
@@ -32,6 +39,34 @@ const campaignSchema = {
     "safetyNotes",
   ],
   properties: {
+    activationType: {
+      type: "string",
+      enum: ["real-time-offer", "golden-pintag-drop"],
+    },
+    activationReason: { type: "string" },
+    sponsorName: { type: "string" },
+    sponsorVenue: { type: "string" },
+    recommendedDropZoneIds: {
+      type: "array",
+      items: {
+        type: "string",
+        enum: ["paseo-shopping-machala", "parque-juan-montalvo", "plaza-colon"],
+      },
+    },
+    selectedDropZoneId: {
+      anyOf: [
+        {
+          type: "string",
+          enum: [
+            "paseo-shopping-machala",
+            "parque-juan-montalvo",
+            "plaza-colon",
+          ],
+        },
+        { type: "null" },
+      ],
+    },
+    claimRedemptionWindowHours: { type: "integer", minimum: 1, maximum: 168 },
     objective: { type: "string" },
     title: { type: "string" },
     description: { type: "string" },
@@ -107,8 +142,7 @@ function createConfiguration(): AzureConfiguration | null {
     deployment:
       process.env.AZURE_OPENAI_DEPLOYMENT?.trim() ||
       DEFAULT_AZURE_OPENAI_DEPLOYMENT,
-    model:
-      process.env.AZURE_OPENAI_MODEL?.trim() || DEFAULT_AZURE_OPENAI_MODEL,
+    model: process.env.AZURE_OPENAI_MODEL?.trim() || DEFAULT_AZURE_OPENAI_MODEL,
   };
 }
 
@@ -142,7 +176,7 @@ export function createAzureOpenAIProvider(): AIProvider | null {
       return parseResponse(() =>
         configuration.client.responses.create({
           model: configuration.deployment,
-          instructions: `You are producing an advisory campaign structure for human review using ${configuration.model}. Interpret only the supplied merchant need and defaults. You may suggest safe campaign copy, identify missing information or ambiguity, recommend one primary metric, and warn against misleading urgency. You must not publish, change authoritative coordinates, validate physical presence, control inventory, create or validate claims, generate redemption codes, validate redemption, fabricate metrics, claim causal sales impact, or override human approval. Return only the required structured output.`,
+          instructions: `You are producing an advisory spatial activation structure for human review using ${configuration.model}. Recommend either real-time-offer or golden-pintag-drop unless the merchant explicitly chose one. Golden recommendations may rank only these approved simulated Drop Zone IDs: paseo-shopping-machala, parque-juan-montalvo, plaza-colon. Never invent coordinates or declare real safety, traffic, permission, or legal authorization. You may suggest transparent copy, identify missing information or ambiguity, recommend one primary metric, reward, and duration, and warn against misleading urgency or unsafe behavior. You must not publish, bypass approval, verify physical presence, enable geofencing, control inventory, create or validate claims or redemption codes, fabricate analytics, claim sales impact or CAC reduction, or override human approval. Return only the required structured output.`,
           input: JSON.stringify(input),
           reasoning: { effort: "low" },
           max_output_tokens: 1_500,
@@ -163,7 +197,7 @@ export function createAzureOpenAIProvider(): AIProvider | null {
       return parseResponse(() =>
         configuration.client.responses.create({
           model: configuration.deployment,
-          instructions: `Generate a short campaign-performance insight using ${configuration.model}. Use only the supplied aggregate metrics. Acknowledge simulated data when indicated. Do not fabricate activity, imply incremental revenue, or present correlation as causation. Do not make publication, inventory, claim, or redemption decisions. Return only the required structured output.`,
+          instructions: `Generate a short campaign-performance insight using ${configuration.model}. Use only the supplied aggregate metrics. State that location and Golden search are simulated when applicable, no physical movement is verified, and no causal sales effect or CAC result is established. Do not fabricate activity, imply incremental revenue, or make publication, inventory, claim, or redemption decisions. Return only the required structured output.`,
           input: JSON.stringify(input),
           reasoning: { effort: "low" },
           max_output_tokens: 900,

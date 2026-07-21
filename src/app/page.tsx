@@ -1,54 +1,62 @@
 "use client";
 
 import { useMemo, useState } from "react";
-
 import { DemoProgress } from "@/components/demo-progress";
+import {
+  GoldenCampaignBanner,
+  GoldenCampaignFields,
+  GoldenLocationReview,
+  GoldenMerchantNotification,
+} from "@/components/golden-campaign-review";
 import type {
   AISourceMode,
   CampaignGenerationResponse,
   InsightResponse,
 } from "@/lib/ai-types";
 import {
+  APPROVED_DROP_ZONES,
   DEMO_CAMPAIGN,
   DEMO_DISTANCE,
   DEMO_MERCHANT_INPUT,
+  GOLDEN_CAMPAIGN,
+  GOLDEN_MERCHANT_INPUT,
+  LATE_USER_MESSAGE,
+  SPONSOR_VENUE,
 } from "@/lib/demo-data";
 import {
   attemptClaim,
   calculateAnalytics,
   validateRedemption,
 } from "@/lib/demo-rules";
+import {
+  approvedDropZonesById,
+  attemptGoldenClaim,
+  canPublishGolden,
+  findGoldenPintag,
+  recommendActivation,
+  startGoldenSearch,
+  unlockGoldenProximity,
+} from "@/lib/golden-drop-rules";
 import type {
+  ActivationPreference,
   CampaignProposal,
   CampaignStatus,
+  Claim,
+  DropStatus,
   FunnelEvent,
   FunnelEventType,
+  GoldenDemoState,
   RedemptionStatus,
   Role,
+  SearchMode,
 } from "@/lib/demo-types";
 
 const roles: Role[] = ["Merchant", "Consumer", "Redemption"];
-
 type Notice = { tone: "success" | "error" | "info"; text: string } | null;
 type RequestState = "idle" | "loading" | "success" | "fallback" | "error";
 
-type MerchantViewProps = {
-  merchantInput: string;
-  proposal: CampaignProposal | null;
-  campaignStatus: CampaignStatus;
-  remainingSupply: number;
-  notice: Notice;
-  requestState: RequestState;
-  sourceMode: AISourceMode | null;
-  onInputChange: (value: string) => void;
-  onGenerate: () => void;
-  onProposalChange: (proposal: CampaignProposal) => void;
-  onPublish: () => void;
-};
-
 function NoticeBanner({ notice }: { notice: Notice }) {
   if (!notice) return null;
-
   return (
     <div className={`notice-banner ${notice.tone}`} role="status">
       <span aria-hidden="true">
@@ -59,104 +67,181 @@ function NoticeBanner({ notice }: { notice: Notice }) {
   );
 }
 
+function SourceBadge({
+  sourceMode,
+  requestState,
+}: {
+  sourceMode: AISourceMode | null;
+  requestState: RequestState;
+}) {
+  return (
+    <span
+      className={`demo-structure-badge ${sourceMode === "azure-gpt-5.6" ? "live" : "fallback"}`}
+    >
+      {sourceMode === "azure-gpt-5.6"
+        ? "Generated live with GPT-5.6 through Azure OpenAI"
+        : requestState === "error"
+          ? "AI request unavailable — deterministic campaign preserved"
+          : "Deterministic fallback — Azure model unavailable"}
+    </span>
+  );
+}
+
+type MerchantProps = {
+  preference: ActivationPreference;
+  merchantInput: string;
+  proposal: CampaignProposal | null;
+  status: CampaignStatus;
+  remainingSupply: number;
+  notice: Notice;
+  requestState: RequestState;
+  sourceMode: AISourceMode | null;
+  claim: Claim | null;
+  onPreference: (value: ActivationPreference) => void;
+  onPreset: (type: "real-time-offer" | "golden-pintag-drop") => void;
+  onInput: (value: string) => void;
+  onGenerate: () => void;
+  onProposal: (proposal: CampaignProposal) => void;
+  onPublish: () => void;
+};
+
 function MerchantView({
+  preference,
   merchantInput,
   proposal,
-  campaignStatus,
+  status,
   remainingSupply,
   notice,
   requestState,
   sourceMode,
-  onInputChange,
+  claim,
+  onPreference,
+  onPreset,
+  onInput,
   onGenerate,
-  onProposalChange,
+  onProposal,
   onPublish,
-}: MerchantViewProps) {
+}: MerchantProps) {
+  const golden = proposal?.activationType === "golden-pintag-drop";
   return (
     <section className="view-stack" aria-labelledby="merchant-heading">
       <div className="merchant-hero">
         <div>
           <p className="eyebrow">Merchant workspace</p>
-          <h1 id="merchant-heading">Compose, review, then publish.</h1>
+          <h1 id="merchant-heading">Choose, structure, and approve.</h1>
           <p className="intro-copy">
-            Azure OpenAI can propose the campaign when available. Deterministic
-            fallback keeps the demo complete, and publication always requires
-            human approval.
+            PINTAG helps local businesses turn nearby attention into measurable
+            store visits through real-time spatial offers and gamified sponsored
+            rewards.
           </p>
         </div>
-
         <article className="dashboard-card" aria-label="Campaign dashboard">
           <div>
-            <span className={`status-badge ${campaignStatus}`}>
-              {campaignStatus}
-            </span>
+            <span className={`status-badge ${status}`}>{status}</span>
             <small>Campaign status</small>
+          </div>
+          <div>
+            <strong>
+              {proposal ? (golden ? "Golden Drop" : "Real-time Offer") : "—"}
+            </strong>
+            <small>Activation mode</small>
           </div>
           <div>
             <strong>{remainingSupply}</strong>
             <small>Rewards remaining</small>
           </div>
-          <div>
-            <strong>{proposal ? `${proposal.startTime}–${proposal.expirationTime}` : "—"}</strong>
-            <small>Demo time window</small>
-          </div>
         </article>
       </div>
-
       <NoticeBanner notice={notice} />
-
       <div className="merchant-workspace">
         <div className="composer-card">
           <div className="section-heading">
             <div>
               <p className="eyebrow">1 · Compose</p>
-              <h2>Describe the operational need</h2>
+              <h2>Describe the merchant need</h2>
             </div>
-            <span className="step-pill">Editable input</span>
+            <span className="step-pill">Human-controlled</span>
           </div>
-
+          <fieldset
+            className="activation-selector"
+            disabled={status === "published"}
+          >
+            <legend>Activation selector</legend>
+            {(
+              [
+                ["recommend", "Recommend activation"],
+                ["real-time-offer", "Real-time Offer"],
+                ["golden-pintag-drop", "Golden Pintag Drop"],
+              ] as const
+            ).map(([value, label]) => (
+              <label key={value}>
+                <input
+                  type="radio"
+                  name="activation"
+                  value={value}
+                  checked={preference === value}
+                  onChange={() => onPreference(value)}
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+          </fieldset>
+          <div className="preset-row">
+            <button
+              type="button"
+              onClick={() => onPreset("real-time-offer")}
+              disabled={status === "published"}
+            >
+              Use real-time offer example
+            </button>
+            <button
+              type="button"
+              onClick={() => onPreset("golden-pintag-drop")}
+              disabled={status === "published"}
+            >
+              Use Golden Drop example
+            </button>
+          </div>
           <label className="sr-only" htmlFor="merchant-need">
             Merchant business need
           </label>
           <textarea
             id="merchant-need"
             value={merchantInput}
-            onChange={(event) => onInputChange(event.target.value)}
+            onChange={(event) => onInput(event.target.value)}
             rows={7}
           />
-
           <div className="composer-footer">
             <p>{merchantInput.length} characters</p>
             <button
               className="primary-button"
               type="button"
               onClick={onGenerate}
-              disabled={campaignStatus === "published" || requestState === "loading"}
+              disabled={status === "published" || requestState === "loading"}
             >
-              {requestState === "loading" ? "Generating campaign…" : "Generate spatial campaign"}
-              {requestState !== "loading" && <span aria-hidden="true">→</span>}
+              {requestState === "loading"
+                ? "Generating campaign…"
+                : "Generate spatial campaign"}
+              <span aria-hidden="true">→</span>
             </button>
           </div>
-
           <aside className="integration-note">
             <span className="status-dot" aria-hidden="true" />
             <div>
               <strong>
-                {requestState === "loading"
-                  ? "Requesting an optional Azure OpenAI proposal"
-                  : "Production-safe fallback enabled"}
+                Optional Azure recommendation with deterministic fallback
               </strong>
               <p>
-                Credentials remain server-side. If Azure quota, deployment, or
-                credentials are unavailable, the deterministic campaign is used.
+                The heuristic is deterministic when Azure is unavailable.
+                Explicit merchant choice always wins, and publication always
+                requires human approval.
               </p>
             </div>
           </aside>
         </div>
-
         {proposal ? (
           <form
-            className="review-card"
+            className={`review-card ${golden ? "golden-review" : ""}`}
             onSubmit={(event) => {
               event.preventDefault();
               onPublish();
@@ -165,24 +250,37 @@ function MerchantView({
             <div className="review-heading">
               <div>
                 <p className="eyebrow">2 · Human review</p>
-                <h2>Campaign proposal</h2>
+                <h2>
+                  {golden ? "Golden Drop proposal" : "Real-time Offer proposal"}
+                </h2>
               </div>
-              <span className={`demo-structure-badge ${sourceMode === "azure-gpt-5.6" ? "live" : "fallback"}`}>
-                {sourceMode === "azure-gpt-5.6"
-                  ? "Generated live with GPT-5.6 through Azure OpenAI"
-                  : requestState === "error"
-                    ? "AI request unavailable — deterministic campaign preserved"
-                    : "Deterministic fallback — Azure model unavailable"}
-              </span>
+              <SourceBadge
+                sourceMode={sourceMode}
+                requestState={requestState}
+              />
             </div>
-
+            {golden && <GoldenCampaignBanner proposal={proposal} />}
             <div className="review-fields">
+              <label className="field-wide">
+                <span>Activation reason</span>
+                <textarea
+                  value={proposal.activationReason}
+                  onChange={(e) =>
+                    onProposal({
+                      ...proposal,
+                      activationReason: e.target.value,
+                    })
+                  }
+                  rows={2}
+                  required
+                />
+              </label>
               <label className="field-wide">
                 <span>Title</span>
                 <input
                   value={proposal.title}
-                  onChange={(event) =>
-                    onProposalChange({ ...proposal, title: event.target.value })
+                  onChange={(e) =>
+                    onProposal({ ...proposal, title: e.target.value })
                   }
                   required
                 />
@@ -191,11 +289,8 @@ function MerchantView({
                 <span>Description</span>
                 <textarea
                   value={proposal.description}
-                  onChange={(event) =>
-                    onProposalChange({
-                      ...proposal,
-                      description: event.target.value,
-                    })
+                  onChange={(e) =>
+                    onProposal({ ...proposal, description: e.target.value })
                   }
                   rows={3}
                   required
@@ -205,22 +300,22 @@ function MerchantView({
                 <span>Reward</span>
                 <input
                   value={proposal.reward}
-                  onChange={(event) =>
-                    onProposalChange({ ...proposal, reward: event.target.value })
+                  onChange={(e) =>
+                    onProposal({ ...proposal, reward: e.target.value })
                   }
                   required
                 />
               </label>
               <label>
-                <span>Reward supply</span>
+                <span>Supply</span>
                 <input
                   type="number"
                   min="1"
                   value={proposal.rewardSupply}
-                  onChange={(event) =>
-                    onProposalChange({
+                  onChange={(e) =>
+                    onProposal({
                       ...proposal,
-                      rewardSupply: Math.max(1, Number(event.target.value)),
+                      rewardSupply: Math.max(1, Number(e.target.value)),
                     })
                   }
                   required
@@ -232,10 +327,10 @@ function MerchantView({
                   type="number"
                   min="1"
                   value={proposal.discoveryRadius}
-                  onChange={(event) =>
-                    onProposalChange({
+                  onChange={(e) =>
+                    onProposal({
                       ...proposal,
-                      discoveryRadius: Math.max(1, Number(event.target.value)),
+                      discoveryRadius: Math.max(1, Number(e.target.value)),
                     })
                   }
                   required
@@ -246,8 +341,8 @@ function MerchantView({
                 <input
                   type="time"
                   value={proposal.startTime}
-                  onChange={(event) =>
-                    onProposalChange({ ...proposal, startTime: event.target.value })
+                  onChange={(e) =>
+                    onProposal({ ...proposal, startTime: e.target.value })
                   }
                   required
                 />
@@ -257,34 +352,53 @@ function MerchantView({
                 <input
                   type="time"
                   value={proposal.expirationTime}
-                  onChange={(event) =>
-                    onProposalChange({
-                      ...proposal,
-                      expirationTime: event.target.value,
-                    })
+                  onChange={(e) =>
+                    onProposal({ ...proposal, expirationTime: e.target.value })
                   }
                   required
                 />
               </label>
+              {golden && (
+                <GoldenCampaignFields
+                  proposal={proposal}
+                  onProposal={onProposal}
+                />
+              )}
             </div>
-
-            <div className="review-facts">
-              <span>Venue: {proposal.venue} (simulated)</span>
-              <span>Primary metric: {proposal.primaryMetric}</span>
-            </div>
-
+            {golden ? (
+              <GoldenLocationReview
+                proposal={proposal}
+                onProposal={onProposal}
+              />
+            ) : (
+              <div className="review-facts">
+                <span>
+                  Discovery and redemption: {proposal.sponsorVenue.name}{" "}
+                  (simulated)
+                </span>
+                <span>Primary metric: {proposal.primaryMetric}</span>
+              </div>
+            )}
             <ul className="review-warnings">
-              <li>Venue, location, and discovery distance are simulated.</li>
+              {proposal.missingInformation.map((item) => (
+                <li key={item}>Missing: {item}</li>
+              ))}
+              {proposal.ambiguityWarnings.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+              {proposal.safetyNotes.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
               <li>Human approval is required before publication.</li>
-              <li>GPT-5.6 integration is pending.</li>
             </ul>
-
             <button
               className="primary-button publish-button"
               type="submit"
-              disabled={campaignStatus === "published"}
+              disabled={status === "published"}
             >
-              {campaignStatus === "published" ? "Campaign published" : "Approve and publish"}
+              {status === "published"
+                ? "Campaign published"
+                : "Approve and publish"}
             </button>
           </form>
         ) : (
@@ -292,143 +406,242 @@ function MerchantView({
             <span aria-hidden="true">02</span>
             <h2>Review appears here</h2>
             <p>
-              Generate the deterministic campaign structure to unlock editable
-              review and publication.
+              Generate a proposal to review its activation mode, terms,
+              locations, safety notes, and publication controls.
             </p>
           </aside>
         )}
       </div>
+      {golden && claim && (
+        <GoldenMerchantNotification proposal={proposal} claim={claim} />
+      )}
     </section>
   );
 }
 
-type ConsumerViewProps = {
+type ConsumerProps = {
   proposal: CampaignProposal | null;
-  campaignStatus: CampaignStatus;
+  status: CampaignStatus;
   remainingSupply: number;
-  isPintagOpen: boolean;
-  claimCode: string;
-  claimStatus: "active" | "redeemed" | null;
+  isOpen: boolean;
+  claim: Claim | null;
+  searchMode: SearchMode;
+  dropStatus: DropStatus;
   notice: Notice;
   onOpen: () => void;
+  onArrive: () => void;
+  onStartSearch: () => void;
+  onFind: () => void;
   onClaim: () => void;
 };
 
 function ConsumerView({
   proposal,
-  campaignStatus,
+  status,
   remainingSupply,
-  isPintagOpen,
-  claimCode,
-  claimStatus,
+  isOpen,
+  claim,
+  searchMode,
+  dropStatus,
   notice,
   onOpen,
+  onArrive,
+  onStartSearch,
+  onFind,
   onClaim,
-}: ConsumerViewProps) {
-  const isPublished = campaignStatus === "published" && proposal;
-
+}: ConsumerProps) {
+  const published = status === "published" && proposal;
+  const golden = proposal?.activationType === "golden-pintag-drop";
   return (
     <section className="view-stack" aria-labelledby="consumer-heading">
       <div className="view-intro">
         <div>
           <p className="eyebrow">Consumer discovery</p>
-          <h1 id="consumer-heading">Discover what is active nearby.</h1>
+          <h1 id="consumer-heading">Discover and act locally.</h1>
         </div>
         <p className="intro-copy">
-          This spatial panel uses a simulated venue, position, distance, and map.
-          It never requests real location access.
+          All map, location, movement, proximity, WebAR, merchant identity, and
+          user identity behavior is simulated.
         </p>
       </div>
-
       <NoticeBanner notice={notice} />
-
       <div className="consumer-workspace">
-        <figure className="map-card" aria-labelledby="map-title">
+        <figure
+          className={`map-card ${golden ? "golden-map" : ""}`}
+          aria-labelledby="map-title"
+        >
           <figcaption className="map-header">
             <div>
               <p className="eyebrow">3 · Discover</p>
-              <h2 id="map-title">Simulated map environment</h2>
+              <h2 id="map-title">
+                {golden ? "Golden Pintag Drop" : "Simulated map environment"}
+              </h2>
             </div>
-            <span className="map-status">No location access</span>
+            <span className="map-status">Simulated map and location data</span>
           </figcaption>
-
           <div className="map-canvas">
-            <div className="map-road map-road-one" aria-hidden="true" />
-            <div className="map-road map-road-two" aria-hidden="true" />
-            <div className="map-block block-one" aria-hidden="true" />
-            <div className="map-block block-two" aria-hidden="true" />
-            <div className="map-block block-three" aria-hidden="true" />
-
+            <div className="map-road map-road-one" />
+            <div className="map-road map-road-two" />
+            <div className="map-block block-one" />
+            <div className="map-block block-two" />
             <div className="map-point consumer-point">
-              <span className="consumer-pulse" aria-hidden="true" />
+              <span className="consumer-pulse" />
               <strong>You</strong>
               <small>Simulated position</small>
             </div>
-
-            <div className="map-point venue-point">
-              <span className="venue-pin" aria-hidden="true"><b>P</b></span>
-              <strong>Casa Dulce</strong>
-              <small>Simulated venue</small>
-            </div>
-
-            <div className={`pintag-map-card ${isPublished ? "active" : "inactive"}`}>
-              <span>{isPublished ? "Active now" : "Inactive"}</span>
-              <strong>{isPublished ? proposal.title : "Afternoon dessert Pintag"}</strong>
+            {golden ? (
+              <>
+                <div className="map-point drop-zone-point">
+                  <span className="gold-pin">★</span>
+                  <strong>
+                    {proposal?.selectedDropZone?.name || "Drop Zone pending"}
+                  </strong>
+                  <small>Simulated discovery location</small>
+                </div>
+                <div className="map-point sponsor-point">
+                  <span className="venue-pin">
+                    <b>H</b>
+                  </span>
+                  <strong>{proposal?.sponsorVenue.name}</strong>
+                  <small>Simulated redemption location</small>
+                </div>
+                <div className="gold-route" aria-hidden="true" />
+              </>
+            ) : (
+              <div className="map-point venue-point">
+                <span className="venue-pin">
+                  <b>H</b>
+                </span>
+                <strong>Homers Café</strong>
+                <small>Simulated venue</small>
+              </div>
+            )}
+            <div
+              className={`pintag-map-card ${published ? "active" : "inactive"} ${golden ? "golden" : ""}`}
+            >
+              <span>
+                {published
+                  ? golden && dropStatus === "claimed"
+                    ? "Claimed"
+                    : "Active now"
+                  : "Inactive"}
+              </span>
+              <strong>
+                {published
+                  ? proposal.title
+                  : golden
+                    ? "Golden Drop awaiting publication"
+                    : "Offer awaiting publication"}
+              </strong>
+              {golden && published && (
+                <small>{proposal.sponsorshipLabel}</small>
+              )}
               <small>
-                {isPublished ? `${DEMO_DISTANCE} simulated distance` : "Awaiting merchant publication"}
+                {published
+                  ? golden
+                    ? `Find at ${proposal.selectedDropZone?.name}`
+                    : `${DEMO_DISTANCE} simulated distance`
+                  : "Awaiting human approval"}
               </small>
-              <button type="button" onClick={onOpen} disabled={!isPublished}>
-                {isPublished ? "Open Pintag" : "Not published"}
+              <button type="button" onClick={onOpen} disabled={!published}>
+                {published ? "Open Pintag" : "Not published"}
               </button>
             </div>
           </div>
-
-          <div className="map-legend" aria-label="Map legend">
-            <span><i className="legend-consumer" /> Consumer</span>
-            <span><i className="legend-venue" /> Venue</span>
-            <span><i className={isPublished ? "legend-active" : "legend-pintag"} /> Pintag</span>
+          <div className="map-legend">
+            <span>
+              <i className="legend-consumer" /> Consumer
+            </span>
+            {golden ? (
+              <>
+                <span>
+                  <i className="legend-gold" /> Drop Zone
+                </span>
+                <span>
+                  <i className="legend-venue" /> Sponsor Venue
+                </span>
+              </>
+            ) : (
+              <span>
+                <i className="legend-venue" /> Merchant venue
+              </span>
+            )}
           </div>
         </figure>
-
-        <aside className="pintag-detail-card" aria-live="polite">
-          {isPublished && isPintagOpen ? (
-            <>
-              <div className="detail-heading">
-                <span className="active-label">Active Pintag</span>
-                <span>{DEMO_DISTANCE} away · simulated</span>
-              </div>
-              <h2>{proposal.title}</h2>
-              <p className="detail-description">{proposal.description}</p>
-              <dl className="detail-list">
-                <div><dt>Venue</dt><dd>{proposal.venue}</dd></div>
-                <div><dt>Time</dt><dd>{proposal.startTime}–{proposal.expirationTime}</dd></div>
-                <div><dt>Reward</dt><dd>{proposal.reward}</dd></div>
-                <div><dt>Remaining</dt><dd>{remainingSupply} of {proposal.rewardSupply}</dd></div>
-              </dl>
-              <p className="simulation-disclosure">
-                Map, venue position, consumer position, and distance are simulated.
-              </p>
-
-              {claimCode ? (
-                <div className="claim-confirmation">
-                  <span>Claim confirmed · {claimStatus}</span>
-                  <strong>{claimCode}</strong>
-                  <small>Single-use deterministic demo code</small>
+        <aside
+          className={`pintag-detail-card ${golden ? "golden-detail" : ""}`}
+          aria-live="polite"
+        >
+          {published && isOpen ? (
+            golden ? (
+              <GoldenDetail
+                proposal={proposal}
+                remainingSupply={remainingSupply}
+                claim={claim}
+                searchMode={searchMode}
+                dropStatus={dropStatus}
+                onArrive={onArrive}
+                onStartSearch={onStartSearch}
+                onFind={onFind}
+                onClaim={onClaim}
+              />
+            ) : (
+              <>
+                <div className="detail-heading">
+                  <span className="active-label">Active Pintag</span>
+                  <span>{DEMO_DISTANCE} away · simulated</span>
                 </div>
-              ) : (
-                <button className="primary-button claim-button" type="button" onClick={onClaim}>
-                  Claim reward
-                </button>
-              )}
-            </>
+                <h2>{proposal.title}</h2>
+                <p className="detail-description">{proposal.description}</p>
+                <dl className="detail-list">
+                  <div>
+                    <dt>Venue</dt>
+                    <dd>{proposal.venue}</dd>
+                  </div>
+                  <div>
+                    <dt>Time</dt>
+                    <dd>
+                      {proposal.startTime}–{proposal.expirationTime}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Reward</dt>
+                    <dd>{proposal.reward}</dd>
+                  </div>
+                  <div>
+                    <dt>Remaining</dt>
+                    <dd>
+                      {remainingSupply} of {proposal.rewardSupply}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="simulation-disclosure">
+                  Map, venue position, consumer position, and distance are
+                  simulated.
+                </p>
+                {claim ? (
+                  <ClaimConfirmation claim={claim} proposal={proposal} />
+                ) : (
+                  <button
+                    className="primary-button claim-button"
+                    type="button"
+                    onClick={onClaim}
+                  >
+                    Claim reward
+                  </button>
+                )}
+              </>
+            )
           ) : (
             <div className="detail-empty">
               <span aria-hidden="true">03</span>
-              <h2>{isPublished ? "Open the active Pintag" : "No active Pintag yet"}</h2>
+              <h2>
+                {published ? "Open the active Pintag" : "No active Pintag yet"}
+              </h2>
               <p>
-                {isPublished
-                  ? "Select the map card to view truthful campaign terms and claim availability."
-                  : "The merchant must review and publish the campaign before discovery begins."}
+                {published
+                  ? "Select the map card to begin the clearly labeled simulated journey."
+                  : "The merchant must review and publish before discovery begins."}
               </p>
             </div>
           )}
@@ -438,25 +651,181 @@ function ConsumerView({
   );
 }
 
-type RedemptionViewProps = {
-  redemptionInput: string;
-  claimCode: string;
-  claimStatus: "active" | "redeemed" | null;
-  redemptionStatus: RedemptionStatus;
-  notice: Notice;
-  onInputChange: (value: string) => void;
-  onValidate: () => void;
-};
+function GoldenDetail({
+  proposal,
+  remainingSupply,
+  claim,
+  searchMode,
+  dropStatus,
+  onArrive,
+  onStartSearch,
+  onFind,
+  onClaim,
+}: {
+  proposal: CampaignProposal;
+  remainingSupply: number;
+  claim: Claim | null;
+  searchMode: SearchMode;
+  dropStatus: DropStatus;
+  onArrive: () => void;
+  onStartSearch: () => void;
+  onFind: () => void;
+  onClaim: () => void;
+}) {
+  return (
+    <>
+      <div className="detail-heading">
+        <span className="golden-label">Sponsored Golden Drop</span>
+        <span>{dropStatus}</span>
+      </div>
+      <h2>{proposal.title}</h2>
+      <p className="detail-description">{proposal.description}</p>
+      <dl className="detail-list">
+        <div>
+          <dt>Find at</dt>
+          <dd>{proposal.selectedDropZone?.name}</dd>
+        </div>
+        <div>
+          <dt>Redeem at</dt>
+          <dd>{proposal.sponsorVenue.name}</dd>
+        </div>
+        <div>
+          <dt>Window</dt>
+          <dd>
+            {proposal.startTime}–{proposal.expirationTime}
+          </dd>
+        </div>
+        <div>
+          <dt>Reward</dt>
+          <dd>{proposal.reward}</dd>
+        </div>
+        <div>
+          <dt>Remaining</dt>
+          <dd>
+            {remainingSupply} of {proposal.rewardSupply}
+          </dd>
+        </div>
+      </dl>
+      <p className="simulation-disclosure">
+        Simulated map and location data. No physical movement or presence is
+        verified.
+      </p>
+      {!claim && searchMode === "locked" && (
+        <div className="search-gate">
+          <p>Move closer to unlock the Golden search.</p>
+          <button className="primary-button" type="button" onClick={onArrive}>
+            Simulate arrival at Drop Zone
+          </button>
+        </div>
+      )}
+      {!claim && searchMode === "proximity-unlocked" && (
+        <div className="search-gate unlocked">
+          <strong>Simulated proximity unlocked</strong>
+          <p>No location or camera permission is requested.</p>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={onStartSearch}
+          >
+            Start simulated AR search
+          </button>
+        </div>
+      )}
+      {!claim && (searchMode === "searching" || searchMode === "found") && (
+        <div className="webar-panel">
+          <div className="webar-heading">
+            <strong>Simulated WebAR search</strong>
+            <span>CSS-only · no camera access</span>
+          </div>
+          {searchMode === "searching" ? (
+            <>
+              <p>Find and tap the floating Golden Pintag.</p>
+              <button
+                className="floating-pintag"
+                type="button"
+                onClick={onFind}
+                aria-label="Found Golden Pintag"
+              >
+                <span>★</span>
+                <small>Homers Café</small>
+              </button>
+            </>
+          ) : (
+            <div className="found-state">
+              <span>★</span>
+              <strong>
+                You found a Golden Pintag sponsored by Homers Café.
+              </strong>
+              <p>Reward and Sponsor Venue revealed.</p>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={onClaim}
+              >
+                Claim Golden reward
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {claim && (
+        <>
+          <ClaimConfirmation claim={claim} proposal={proposal} />
+          <div className="late-user-state">
+            <span>Public post-claim state</span>
+            <strong>{LATE_USER_MESSAGE}</strong>
+            <p>Sponsored by {proposal.sponsorName} · Drop status: claimed</p>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function ClaimConfirmation({
+  claim,
+  proposal,
+}: {
+  claim: Claim;
+  proposal: CampaignProposal;
+}) {
+  const golden = proposal.activationType === "golden-pintag-drop";
+  return (
+    <div className="claim-confirmation">
+      <span>
+        {golden
+          ? "You found the Golden Pintag. Your reward is reserved for 24 hours."
+          : `Claim confirmed · ${claim.status}`}
+      </span>
+      <strong>{claim.code}</strong>
+      <small>Reward: {proposal.reward}</small>
+      <small>Redeem at: {proposal.sponsorVenue.name}</small>
+      <small>
+        Redemption window: {proposal.claimRedemptionWindowHours} hours ·
+        simulated demo
+      </small>
+    </div>
+  );
+}
 
 function RedemptionView({
+  proposal,
   redemptionInput,
-  claimCode,
-  claimStatus,
-  redemptionStatus,
+  claim,
+  status,
   notice,
-  onInputChange,
+  onInput,
   onValidate,
-}: RedemptionViewProps) {
+}: {
+  proposal: CampaignProposal | null;
+  redemptionInput: string;
+  claim: Claim | null;
+  status: RedemptionStatus;
+  notice: Notice;
+  onInput: (value: string) => void;
+  onValidate: () => void;
+}) {
+  const golden = proposal?.activationType === "golden-pintag-drop";
   return (
     <section className="view-stack" aria-labelledby="redemption-heading">
       <div className="view-intro">
@@ -465,58 +834,71 @@ function RedemptionView({
           <h1 id="redemption-heading">Validate once. Deterministically.</h1>
         </div>
         <p className="intro-copy">
-          Code matching and single-use enforcement are local business rules.
-          GPT-5.6 does not participate in redemption validation.
+          GPT-5.6 does not participate in code validation, inventory, or
+          redemption.
         </p>
       </div>
-
       <NoticeBanner notice={notice} />
-
+      {golden && claim && (
+        <GoldenMerchantNotification proposal={proposal} claim={claim} />
+      )}
       <div className="redemption-workspace">
         <form
           className="redemption-card"
-          onSubmit={(event) => {
-            event.preventDefault();
+          onSubmit={(e) => {
+            e.preventDefault();
             onValidate();
           }}
         >
-          <div className="redemption-icon" aria-hidden="true">✓</div>
+          <div className="redemption-icon">✓</div>
           <p className="eyebrow">5 · Redeem</p>
           <h2>Enter the consumer&apos;s code</h2>
-          <p className="helper-text">
-            Try the generated code, a repeated use, or an invalid value.
-          </p>
-
           <label htmlFor="redemption-code">Redemption code</label>
           <input
             id="redemption-code"
-            name="redemption-code"
             value={redemptionInput}
-            onChange={(event) => onInputChange(event.target.value.toUpperCase())}
-            type="text"
+            onChange={(e) => onInput(e.target.value.toUpperCase())}
             placeholder="PINTAG-0000"
             autoComplete="off"
           />
           <button className="primary-button validate-button" type="submit">
             Validate redemption
           </button>
-
           <p className="redemption-notice">
             Deterministic local validation · no AI · no external request
           </p>
         </form>
-
         <aside className="redemption-summary">
           <p className="eyebrow">Session state</p>
           <h2>Redemption record</h2>
           <dl>
-            <div><dt>Claim code</dt><dd>{claimCode || "Not created"}</dd></div>
-            <div><dt>Claim status</dt><dd>{claimStatus || "Not claimed"}</dd></div>
-            <div><dt>Last validation</dt><dd>{redemptionStatus}</dd></div>
+            <div>
+              <dt>Claim code</dt>
+              <dd>{claim?.code || "Not created"}</dd>
+            </div>
+            <div>
+              <dt>Claim status</dt>
+              <dd>{claim?.status || "Not claimed"}</dd>
+            </div>
+            <div>
+              <dt>Last validation</dt>
+              <dd>{status}</dd>
+            </div>
+            {proposal && (
+              <div>
+                <dt>Redeem at</dt>
+                <dd>{proposal.sponsorVenue.name}</dd>
+              </div>
+            )}
           </dl>
+          {status === "redeemed" && proposal && (
+            <p>
+              <strong>Reward redeemed at: {proposal.sponsorVenue.name}</strong>
+            </p>
+          )}
           <p>
-            Correct unused codes redeem once. Invalid and repeated submissions
-            are rejected and recorded as prototype session events.
+            Redemption is the strongest prototype signal of journey completion;
+            no merchant visit is claimed before successful validation.
           </p>
         </aside>
       </div>
@@ -525,12 +907,14 @@ function RedemptionView({
 }
 
 function SessionAnalytics({
+  proposal,
   metrics,
   events,
   insight,
   requestState,
   onGenerateInsight,
 }: {
+  proposal: CampaignProposal | null;
   metrics: ReturnType<typeof calculateAnalytics>;
   events: FunnelEvent[];
   insight: InsightResponse | null;
@@ -544,22 +928,40 @@ function SessionAnalytics({
     ["Redemptions", metrics.redemptions],
     ["Claim-to-redemption", `${metrics.claimToRedemptionRate}%`],
     ["Remaining supply", metrics.remainingSupply],
+    ["Golden searches started", metrics.goldenSearchesStarted],
+    ["Golden Pintags found", metrics.goldenPintagsFound],
   ];
-
   return (
-    <section className="analytics-section" aria-labelledby="analytics-heading">
+    <section className="analytics-section">
       <div className="analytics-heading">
         <div>
           <p className="eyebrow">6 · Measure</p>
-          <h2 id="analytics-heading">Prototype session events</h2>
+          <h2>Prototype session events</h2>
         </div>
         <div className="analytics-actions">
           <span>{events.length} events recorded</span>
-          <button type="button" onClick={onGenerateInsight} disabled={requestState === "loading"}>
-            {requestState === "loading" ? "Generating insight…" : "Generate campaign insight"}
+          <button
+            type="button"
+            onClick={onGenerateInsight}
+            disabled={requestState === "loading"}
+          >
+            {requestState === "loading"
+              ? "Generating insight…"
+              : "Generate campaign insight"}
           </button>
         </div>
       </div>
+      {proposal && (
+        <div className="analytics-context">
+          <span>Activation type: {proposal.activationType}</span>
+          <span>
+            Drop Zone:{" "}
+            {proposal.selectedDropZone?.name ||
+              "Same as Sponsor Venue / not applicable"}
+          </span>
+          <span>Sponsor Venue: {proposal.sponsorVenue.name}</span>
+        </div>
+      )}
       <div className="metrics-grid">
         {cards.map(([label, value]) => (
           <article key={label}>
@@ -568,37 +970,50 @@ function SessionAnalytics({
           </article>
         ))}
       </div>
-      <div className="event-strip" aria-label="Recorded event sequence">
+      <div className="event-strip">
         {events.length ? (
           events.map((event) => <code key={event.id}>{event.type}</code>)
         ) : (
-          <p>No historical activity is fabricated. Complete the demo to record session events.</p>
+          <p>No prototype events yet.</p>
         )}
       </div>
       {insight && (
-        <article className="insight-card" aria-live="polite">
+        <div className="insight-card">
           <div className="insight-heading">
             <div>
               <span>Campaign insight</span>
               <h3>{insight.summary}</h3>
             </div>
-            <strong className={insight.sourceMode === "azure-gpt-5.6" ? "live" : "fallback"}>
+            <strong
+              className={
+                insight.sourceMode === "azure-gpt-5.6" ? "live" : "fallback"
+              }
+            >
               {insight.sourceMode === "azure-gpt-5.6"
                 ? "Generated live with GPT-5.6 through Azure OpenAI"
                 : "Deterministic fallback — Azure model unavailable"}
             </strong>
           </div>
           <dl>
-            <div><dt>Observation</dt><dd>{insight.observation}</dd></div>
-            <div><dt>Recommendation</dt><dd>{insight.recommendation}</dd></div>
-            <div><dt>Limitation</dt><dd>{insight.limitation}</dd></div>
+            <div>
+              <dt>Observation</dt>
+              <dd>{insight.observation}</dd>
+            </div>
+            <div>
+              <dt>Recommendation</dt>
+              <dd>{insight.recommendation}</dd>
+            </div>
+            <div>
+              <dt>Limitation</dt>
+              <dd>{insight.limitation}</dd>
+            </div>
           </dl>
           <p>{insight.notice}</p>
-        </article>
+        </div>
       )}
       {requestState === "error" && (
-        <p className="insight-error" role="status">
-          AI request unavailable — deterministic metrics preserved
+        <p className="insight-error">
+          AI request unavailable — deterministic metrics preserved.
         </p>
       )}
     </section>
@@ -607,33 +1022,41 @@ function SessionAnalytics({
 
 export default function Home() {
   const [activeRole, setActiveRole] = useState<Role>("Merchant");
+  const [preference, setPreference] =
+    useState<ActivationPreference>("recommend");
   const [merchantInput, setMerchantInput] = useState(DEMO_MERCHANT_INPUT);
   const [proposal, setProposal] = useState<CampaignProposal | null>(null);
   const [campaignStatus, setCampaignStatus] = useState<CampaignStatus>("draft");
   const [remainingSupply, setRemainingSupply] = useState(0);
-  const [claim, setClaim] = useState<ReturnType<typeof attemptClaim>["state"]["claim"]>(null);
-  const [redemptionCode, setRedemptionCode] = useState("");
+  const [claim, setClaim] = useState<Claim | null>(null);
   const [redemptionInput, setRedemptionInput] = useState("");
-  const [redemptionStatus, setRedemptionStatus] = useState<RedemptionStatus>("idle");
+  const [redemptionStatus, setRedemptionStatus] =
+    useState<RedemptionStatus>("idle");
   const [events, setEvents] = useState<FunnelEvent[]>([]);
   const [isPintagOpen, setIsPintagOpen] = useState(false);
-  const [campaignRequestState, setCampaignRequestState] = useState<RequestState>("idle");
-  const [campaignSourceMode, setCampaignSourceMode] = useState<AISourceMode | null>(null);
+  const [searchMode, setSearchMode] = useState<SearchMode>("locked");
+  const [dropStatus, setDropStatus] = useState<DropStatus>("draft");
+  const [campaignRequestState, setCampaignRequestState] =
+    useState<RequestState>("idle");
+  const [campaignSourceMode, setCampaignSourceMode] =
+    useState<AISourceMode | null>(null);
   const [insight, setInsight] = useState<InsightResponse | null>(null);
-  const [insightRequestState, setInsightRequestState] = useState<RequestState>("idle");
+  const [insightRequestState, setInsightRequestState] =
+    useState<RequestState>("idle");
   const [notices, setNotices] = useState<Record<Role, Notice>>({
     Merchant: null,
     Consumer: null,
     Redemption: null,
   });
-
   const analytics = useMemo(
     () => calculateAnalytics(events, remainingSupply),
     [events, remainingSupply],
   );
-
-  const eventTypes = useMemo(() => new Set(events.map((event) => event.type)), [events]);
-  const milestoneCompletion = [
+  const eventTypes = useMemo(
+    () => new Set(events.map((event) => event.type)),
+    [events],
+  );
+  const milestones = [
     proposal !== null,
     campaignStatus === "published",
     eventTypes.has("pintag_opened"),
@@ -641,14 +1064,19 @@ export default function Home() {
     claim?.status === "redeemed",
     eventTypes.has("redemption_validated"),
   ];
-  const currentStep = milestoneCompletion.findIndex((complete) => !complete);
-  const progressSteps = ["Compose", "Publish", "Discover", "Claim", "Redeem", "Measure"].map(
-    (label, index) => ({
-      label,
-      complete: milestoneCompletion[index],
-      current: index === (currentStep === -1 ? 5 : currentStep),
-    }),
-  );
+  const firstIncomplete = milestones.findIndex((complete) => !complete);
+  const progressSteps = [
+    "Compose",
+    "Publish",
+    "Discover",
+    "Claim",
+    "Redeem",
+    "Measure",
+  ].map((label, index) => ({
+    label,
+    complete: milestones[index],
+    current: index === (firstIncomplete === -1 ? 5 : firstIncomplete),
+  }));
 
   function recordEvent(type: FunnelEventType) {
     setEvents((current) => [
@@ -656,64 +1084,137 @@ export default function Home() {
       { id: current.length + 1, type, recordedAt: new Date().toISOString() },
     ]);
   }
-
   function setNotice(role: Role, notice: Notice) {
     setNotices((current) => ({ ...current, [role]: notice }));
   }
+  function clearGeneratedState() {
+    setProposal(null);
+    setCampaignStatus("draft");
+    setRemainingSupply(0);
+    setClaim(null);
+    setRedemptionInput("");
+    setRedemptionStatus("idle");
+    setEvents([]);
+    setIsPintagOpen(false);
+    setSearchMode("locked");
+    setDropStatus("draft");
+    setCampaignRequestState("idle");
+    setCampaignSourceMode(null);
+    setInsight(null);
+    setInsightRequestState("idle");
+    setNotices({ Merchant: null, Consumer: null, Redemption: null });
+  }
+  function changePreference(value: ActivationPreference) {
+    if (campaignStatus === "published") {
+      setNotice("Merchant", {
+        tone: "error",
+        text: "Reset the demo before changing activation mode.",
+      });
+      return;
+    }
+    setPreference(value);
+    clearGeneratedState();
+  }
+  function usePreset(type: "real-time-offer" | "golden-pintag-drop") {
+    changePreference(type);
+    setMerchantInput(
+      type === "golden-pintag-drop"
+        ? GOLDEN_MERCHANT_INPUT
+        : DEMO_MERCHANT_INPUT,
+    );
+  }
 
   async function generateCampaign() {
-    if (campaignStatus === "published") {
-      setNotice("Merchant", { tone: "error", text: "Reset the demo before generating another campaign." });
-      return;
-    }
-    if (!merchantInput.trim()) {
-      setNotice("Merchant", { tone: "error", text: "Enter a merchant need before generating a campaign." });
-      return;
-    }
-
+    if (campaignStatus === "published")
+      return setNotice("Merchant", {
+        tone: "error",
+        text: "Reset the demo before generating another campaign.",
+      });
+    if (!merchantInput.trim())
+      return setNotice("Merchant", {
+        tone: "error",
+        text: "Enter a merchant need before generating a campaign.",
+      });
+    const recommendation = recommendActivation(merchantInput, preference);
+    const base =
+      recommendation.activationType === "golden-pintag-drop"
+        ? GOLDEN_CAMPAIGN
+        : DEMO_CAMPAIGN;
     setCampaignRequestState("loading");
-    setNotice("Merchant", { tone: "info", text: "Preparing a structured campaign proposal…" });
-
+    setNotice("Merchant", {
+      tone: "info",
+      text: "Preparing a structured activation proposal…",
+    });
     try {
       const response = await fetch("/api/generate-campaign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           merchantNeed: merchantInput,
-          venue: DEMO_CAMPAIGN.venue,
-          defaultSupply: DEMO_CAMPAIGN.rewardSupply,
-          defaultStartTime: DEMO_CAMPAIGN.startTime,
-          defaultEndTime: DEMO_CAMPAIGN.expirationTime,
-          defaultRadiusMeters: DEMO_CAMPAIGN.discoveryRadius,
+          venue: SPONSOR_VENUE.name,
+          defaultSupply: base.rewardSupply,
+          defaultStartTime: base.startTime,
+          defaultEndTime: base.expirationTime,
+          defaultRadiusMeters: base.discoveryRadius,
+          activationPreference: preference,
         }),
       });
       if (!response.ok) throw new Error("Campaign request rejected");
-
       const result = (await response.json()) as CampaignGenerationResponse;
+      const isGolden = result.activationType === "golden-pintag-drop";
+      const zones = isGolden
+        ? approvedDropZonesById(result.recommendedDropZoneIds)
+        : [];
       setProposal({
+        ...(isGolden ? GOLDEN_CAMPAIGN : DEMO_CAMPAIGN),
+        activationType: result.activationType,
+        activationReason: result.activationReason,
         title: result.title,
         description: result.description,
-        venue: DEMO_CAMPAIGN.venue,
+        sponsorName: result.sponsorName,
+        sponsorVenue: { ...SPONSOR_VENUE, name: result.sponsorVenue },
+        venue: result.sponsorVenue,
+        selectedDropZone: null,
+        recommendedDropZones:
+          isGolden && zones.length
+            ? zones
+            : isGolden
+              ? APPROVED_DROP_ZONES
+              : [],
+        claimRedemptionWindowHours: result.claimRedemptionWindowHours,
         startTime: result.startTime,
         expirationTime: result.endTime,
         rewardSupply: result.supply,
         reward: result.reward,
         discoveryRadius: result.discoveryRadiusMeters,
         primaryMetric: result.primaryMetric,
+        missingInformation: result.missingInformation,
+        ambiguityWarnings: result.ambiguityWarnings,
+        safetyNotes: result.safetyNotes,
       });
       setCampaignStatus("review");
       setRemainingSupply(result.supply);
+      setDropStatus("draft");
+      setSearchMode("locked");
       setCampaignSourceMode(result.sourceMode);
-      setCampaignRequestState(result.sourceMode === "azure-gpt-5.6" ? "success" : "fallback");
+      setCampaignRequestState(
+        result.sourceMode === "azure-gpt-5.6" ? "success" : "fallback",
+      );
       setNotice("Merchant", {
         tone: result.sourceMode === "azure-gpt-5.6" ? "success" : "info",
         text: result.notice,
       });
       recordEvent("campaign_generated");
     } catch {
-      setProposal({ ...DEMO_CAMPAIGN });
+      setProposal({
+        ...base,
+        activationReason: recommendation.activationReason,
+        ambiguityWarnings: recommendation.ambiguityWarning
+          ? [recommendation.ambiguityWarning]
+          : base.ambiguityWarnings,
+      });
       setCampaignStatus("review");
-      setRemainingSupply(DEMO_CAMPAIGN.rewardSupply);
+      setRemainingSupply(base.rewardSupply);
       setCampaignSourceMode("deterministic-fallback");
       setCampaignRequestState("error");
       setNotice("Merchant", {
@@ -724,6 +1225,129 @@ export default function Home() {
     }
   }
 
+  function publishCampaign() {
+    if (!proposal) return;
+    if (proposal.startTime >= proposal.expirationTime)
+      return setNotice("Merchant", {
+        tone: "error",
+        text: "Expiration time must be later than the start time.",
+      });
+    if (
+      proposal.activationType === "golden-pintag-drop" &&
+      !canPublishGolden(proposal.selectedDropZone)
+    )
+      return setNotice("Merchant", {
+        tone: "error",
+        text: "Select one approved Drop Zone before publishing the Golden Drop.",
+      });
+    setCampaignStatus("published");
+    setRemainingSupply(proposal.rewardSupply);
+    setDropStatus(
+      proposal.activationType === "golden-pintag-drop"
+        ? "available"
+        : "published",
+    );
+    setNotice("Merchant", {
+      tone: "success",
+      text: "Campaign approved and published to the simulated map.",
+    });
+    recordEvent("campaign_published");
+  }
+  function openPintag() {
+    if (campaignStatus !== "published")
+      return setNotice("Consumer", {
+        tone: "error",
+        text: "This Pintag is inactive until the merchant publishes it.",
+      });
+    if (!isPintagOpen) recordEvent("pintag_opened");
+    setIsPintagOpen(true);
+    setNotice("Consumer", {
+      tone: "info",
+      text: "Pintag details opened using simulated spatial data.",
+    });
+  }
+  function currentGoldenState(): GoldenDemoState {
+    return {
+      campaignStatus,
+      remainingSupply,
+      claim,
+      redemptionStatus,
+      dropStatus,
+      searchMode,
+      selectedDropZone: proposal?.selectedDropZone || null,
+      rewardClaimedByCurrentSession: Boolean(claim),
+      rewardAvailabilityStatus: remainingSupply > 0 ? "available" : "claimed",
+    };
+  }
+  function simulateArrival() {
+    const next = unlockGoldenProximity(currentGoldenState());
+    if (next.searchMode === "proximity-unlocked") {
+      setSearchMode(next.searchMode);
+      setNotice("Consumer", {
+        tone: "success",
+        text: "Simulated proximity unlocked",
+      });
+      recordEvent("drop_zone_arrival_simulated");
+    }
+  }
+  function beginSearch() {
+    const next = startGoldenSearch(currentGoldenState());
+    if (next.searchMode === "searching") {
+      setSearchMode(next.searchMode);
+      recordEvent("golden_search_started");
+    }
+  }
+  function findGolden() {
+    const next = findGoldenPintag(currentGoldenState());
+    if (next.searchMode === "found") {
+      setSearchMode(next.searchMode);
+      setNotice("Consumer", {
+        tone: "success",
+        text: "You found a Golden Pintag sponsored by Homers Café.",
+      });
+      recordEvent("golden_pintag_found");
+    }
+  }
+  function claimReward() {
+    if (!proposal) return;
+    const result =
+      proposal.activationType === "golden-pintag-drop"
+        ? attemptGoldenClaim(currentGoldenState())
+        : attemptClaim({
+            campaignStatus,
+            remainingSupply,
+            claim,
+            redemptionStatus,
+          });
+    setRemainingSupply(result.state.remainingSupply);
+    setClaim(result.state.claim);
+    setRedemptionStatus(result.state.redemptionStatus);
+    if (proposal.activationType === "golden-pintag-drop") {
+      const goldenState = result.state as GoldenDemoState;
+      setDropStatus(goldenState.dropStatus);
+    }
+    setNotice("Consumer", {
+      tone: result.ok ? "success" : "error",
+      text: result.message,
+    });
+    if (result.ok && result.state.claim) {
+      setRedemptionInput(result.state.claim.code);
+      recordEvent("claim_created");
+    }
+  }
+  function redeemClaim() {
+    const result = validateRedemption(
+      { campaignStatus, remainingSupply, claim, redemptionStatus },
+      redemptionInput,
+    );
+    setClaim(result.state.claim);
+    setRedemptionStatus(result.state.redemptionStatus);
+    setNotice("Redemption", {
+      tone: result.ok ? "success" : "error",
+      text: result.message,
+    });
+    recordEvent(result.ok ? "redemption_validated" : "redemption_rejected");
+  }
   async function generateInsight() {
     setInsightRequestState("loading");
     try {
@@ -731,6 +1355,11 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          activationType: proposal?.activationType || "real-time-offer",
+          dropZone: proposal?.selectedDropZone?.name || null,
+          sponsorVenue: proposal?.sponsorVenue.name || SPONSOR_VENUE.name,
+          searchesStarted: analytics.goldenSearchesStarted,
+          goldenPintagsFound: analytics.goldenPintagsFound,
           publications: analytics.publications,
           detailViews: analytics.pintagViews,
           claims: analytics.claims,
@@ -740,98 +1369,44 @@ export default function Home() {
           includesSimulatedData: true,
         }),
       });
-      if (!response.ok) throw new Error("Insight request rejected");
+      if (!response.ok) throw new Error("Insight rejected");
       const result = (await response.json()) as InsightResponse;
       setInsight(result);
-      setInsightRequestState(result.sourceMode === "azure-gpt-5.6" ? "success" : "fallback");
+      setInsightRequestState(
+        result.sourceMode === "azure-gpt-5.6" ? "success" : "fallback",
+      );
     } catch {
       setInsightRequestState("error");
     }
   }
-
-  function publishCampaign() {
-    if (!proposal) return;
-    if (proposal.startTime >= proposal.expirationTime) {
-      setNotice("Merchant", { tone: "error", text: "Expiration time must be later than the start time." });
-      return;
-    }
-    setCampaignStatus("published");
-    setRemainingSupply(proposal.rewardSupply);
-    setNotice("Merchant", { tone: "success", text: "Campaign approved and published to the simulated map." });
-    recordEvent("campaign_published");
-  }
-
-  function openPintag() {
-    if (campaignStatus !== "published") {
-      setNotice("Consumer", { tone: "error", text: "This Pintag is inactive until the merchant publishes it." });
-      return;
-    }
-    if (!isPintagOpen) recordEvent("pintag_opened");
-    setIsPintagOpen(true);
-    setNotice("Consumer", { tone: "info", text: "Pintag details opened using simulated spatial data." });
-  }
-
-  function claimReward() {
-    const result = attemptClaim({ campaignStatus, remainingSupply, claim, redemptionStatus });
-    setRemainingSupply(result.state.remainingSupply);
-    setClaim(result.state.claim);
-    setRedemptionStatus(result.state.redemptionStatus);
-    setNotice("Consumer", { tone: result.ok ? "success" : "error", text: result.message });
-    if (result.ok && result.state.claim) {
-      setRedemptionCode(result.state.claim.code);
-      setRedemptionInput(result.state.claim.code);
-      recordEvent("claim_created");
-    }
-  }
-
-  function redeemClaim() {
-    const result = validateRedemption(
-      { campaignStatus, remainingSupply, claim, redemptionStatus },
-      redemptionInput,
-    );
-    setClaim(result.state.claim);
-    setRedemptionStatus(result.state.redemptionStatus);
-    setNotice("Redemption", { tone: result.ok ? "success" : "error", text: result.message });
-    recordEvent(result.ok ? "redemption_validated" : "redemption_rejected");
-  }
-
   function resetDemo() {
     setActiveRole("Merchant");
+    setPreference("recommend");
     setMerchantInput(DEMO_MERCHANT_INPUT);
-    setProposal(null);
-    setCampaignStatus("draft");
-    setRemainingSupply(0);
-    setClaim(null);
-    setRedemptionCode("");
-    setRedemptionInput("");
-    setRedemptionStatus("idle");
-    setEvents([]);
-    setIsPintagOpen(false);
-    setCampaignRequestState("idle");
-    setCampaignSourceMode(null);
-    setInsight(null);
-    setInsightRequestState("idle");
-    setNotices({ Merchant: null, Consumer: null, Redemption: null });
+    clearGeneratedState();
   }
 
   return (
     <div className="site-shell">
       <header className="site-header">
-        <a className="brand" href="#main-content" aria-label="PINTAG home">
-          <span className="brand-mark" aria-hidden="true">P</span>
-          <span><strong>PINTAG</strong><small>Spatial Campaign Copilot</small></span>
+        <a className="brand" href="#main-content">
+          <span className="brand-mark">P</span>
+          <span>
+            <strong>PINTAG</strong>
+            <small>Spatial Campaign Copilot</small>
+          </span>
         </a>
-        <div className="event-meta" aria-label="Project information">
+        <div className="event-meta">
           <span>OpenAI Build Week 2026</span>
-          <span className="meta-divider" aria-hidden="true" />
+          <span className="meta-divider" />
           <span>Work &amp; Productivity</span>
           <strong className="demo-badge">Demo prototype</strong>
-          <button className="reset-button" type="button" onClick={resetDemo}>Reset demo</button>
+          <button className="reset-button" type="button" onClick={resetDemo}>
+            Reset demo
+          </button>
         </div>
       </header>
-
       <DemoProgress steps={progressSteps} />
-
       <nav className="role-nav" aria-label="Choose a demo role">
         {roles.map((role) => (
           <button
@@ -845,60 +1420,72 @@ export default function Home() {
           </button>
         ))}
       </nav>
-
       <main id="main-content">
         {activeRole === "Merchant" && (
           <MerchantView
+            preference={preference}
             merchantInput={merchantInput}
             proposal={proposal}
-            campaignStatus={campaignStatus}
+            status={campaignStatus}
             remainingSupply={remainingSupply}
             notice={notices.Merchant}
             requestState={campaignRequestState}
             sourceMode={campaignSourceMode}
-            onInputChange={setMerchantInput}
+            claim={claim}
+            onPreference={changePreference}
+            onPreset={usePreset}
+            onInput={setMerchantInput}
             onGenerate={generateCampaign}
-            onProposalChange={setProposal}
+            onProposal={setProposal}
             onPublish={publishCampaign}
           />
         )}
         {activeRole === "Consumer" && (
           <ConsumerView
             proposal={proposal}
-            campaignStatus={campaignStatus}
+            status={campaignStatus}
             remainingSupply={remainingSupply}
-            isPintagOpen={isPintagOpen}
-            claimCode={redemptionCode}
-            claimStatus={claim?.status ?? null}
+            isOpen={isPintagOpen}
+            claim={claim}
+            searchMode={searchMode}
+            dropStatus={dropStatus}
             notice={notices.Consumer}
             onOpen={openPintag}
+            onArrive={simulateArrival}
+            onStartSearch={beginSearch}
+            onFind={findGolden}
             onClaim={claimReward}
           />
         )}
         {activeRole === "Redemption" && (
           <RedemptionView
+            proposal={proposal}
             redemptionInput={redemptionInput}
-            claimCode={redemptionCode}
-            claimStatus={claim?.status ?? null}
-            redemptionStatus={redemptionStatus}
+            claim={claim}
+            status={redemptionStatus}
             notice={notices.Redemption}
-            onInputChange={setRedemptionInput}
+            onInput={setRedemptionInput}
             onValidate={redeemClaim}
           />
         )}
       </main>
-
       <SessionAnalytics
+        proposal={proposal}
         metrics={analytics}
         events={events}
         insight={insight}
         requestState={insightRequestState}
         onGenerateInsight={generateInsight}
       />
-
       <footer className="site-footer">
-        <p>Independent Build Week prototype · Separate from the contractual PINTAG MVP</p>
-        <p>Simulated identities and location data · Optional server-side Azure OpenAI</p>
+        <p>
+          Independent Build Week prototype · Separate from the contractual
+          PINTAG MVP
+        </p>
+        <p>
+          Simulated identities, map, movement, proximity, and WebAR · Optional
+          server-side Azure OpenAI
+        </p>
       </footer>
     </div>
   );
