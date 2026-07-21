@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import { DemoProgress } from "@/components/demo-progress";
 import {
@@ -491,8 +492,21 @@ function ConsumerView({
             </div>
             {golden ? (
               <>
-                <div className="map-point drop-zone-point">
-                  <span className="gold-pin">★</span>
+                <div
+                  className="map-point drop-zone-point"
+                  role="group"
+                  aria-label={`Golden Pintag Drop at ${proposal?.selectedDropZone?.name || "selected Drop Zone"}`}
+                >
+                  <span className="gold-pin">
+                    <Image
+                      className="gold-pin-mark"
+                      src="/brand/pintag-mark.png"
+                      alt="PINTAG logo"
+                      width={500}
+                      height={500}
+                    />
+                    <i aria-hidden="true">✦</i>
+                  </span>
                   <strong>
                     {proposal?.selectedDropZone?.name || "Drop Zone pending"}
                   </strong>
@@ -734,25 +748,64 @@ function GoldenDetail({
       {!claim && (searchMode === "searching" || searchMode === "found") && (
         <div className="webar-panel">
           <div className="webar-heading">
-            <strong>Simulated WebAR search</strong>
-            <span>CSS-only · no camera access</span>
+            <div>
+              <strong>Simulated WebAR search</strong>
+              <span>Illustrative shopping environment — no live camera feed</span>
+            </div>
+            <span className="webar-status">Simulated view</span>
           </div>
+          <div className="webar-atrium" aria-hidden="true" />
+          <div className="camera-reticle" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <i />
+          </div>
+          <small className="webar-css-disclosure">
+            CSS-only — no camera access
+          </small>
           {searchMode === "searching" ? (
             <>
-              <p>Find and tap the floating Golden Pintag.</p>
+              <p className="webar-instruction">
+                Find and tap the floating Golden Pintag.
+              </p>
               <button
                 className="floating-pintag"
                 type="button"
                 onClick={onFind}
                 aria-label="Found Golden Pintag"
               >
-                <span>★</span>
-                <small>Homers Café</small>
+                <span className="golden-pintag-status">
+                  Golden Pintag detected
+                </span>
+                <span className="golden-pintag-plate">
+                  <Image
+                    className="golden-pintag-mark"
+                    src="/brand/pintag-mark.png"
+                    alt="PINTAG logo"
+                    width={500}
+                    height={500}
+                    priority
+                  />
+                </span>
+                <small className="golden-pintag-sponsor">Homers Café</small>
               </button>
             </>
           ) : (
             <div className="found-state">
-              <span>★</span>
+              <div className="found-pintag-object">
+                <span className="golden-pintag-plate">
+                  <Image
+                    className="golden-pintag-mark"
+                    src="/brand/pintag-mark.png"
+                    alt="PINTAG logo"
+                    width={500}
+                    height={500}
+                  />
+                </span>
+                <small>Homers Café</small>
+              </div>
+              <span className="found-kicker">Golden reward discovered</span>
               <strong>
                 You found a Golden Pintag sponsored by Homers Café.
               </strong>
@@ -1390,8 +1443,17 @@ export default function Home() {
     <div className="site-shell">
       <header className="site-header">
         <a className="brand" href="#main-content">
-          <span className="brand-mark">P</span>
-          <span>
+          <span className="brand-logo-frame">
+            <Image
+              className="brand-logo"
+              src="/brand/pintag-mark.png"
+              alt="PINTAG logo"
+              width={500}
+              height={500}
+              priority
+            />
+          </span>
+          <span className="brand-copy">
             <strong>PINTAG</strong>
             <small>Spatial Campaign Copilot</small>
           </span>
@@ -1478,10 +1540,19 @@ export default function Home() {
         onGenerateInsight={generateInsight}
       />
       <footer className="site-footer">
-        <p>
-          Independent Build Week prototype · Separate from the contractual
-          PINTAG MVP
-        </p>
+        <div className="footer-brand">
+          <Image
+            className="footer-logo"
+            src="/brand/pintag-mark.png"
+            alt="PINTAG logo"
+            width={500}
+            height={500}
+          />
+          <p>
+            Independent Build Week prototype · Separate from the contractual
+            PINTAG MVP
+          </p>
+        </div>
         <p>
           Simulated identities, map, movement, proximity, and WebAR · Optional
           server-side Azure OpenAI
