@@ -24,3 +24,6 @@ Azure OpenAI quota has been requested and remains externally controlled. A succe
 
 Security:
 Azure credentials are read only by server-side route handlers and are never included in browser responses or Git. Copy `.env.example` for local reference, but do not commit `.env.local` or real credentials.
+
+License:
+The prototype source code is released under the MIT License. PINTAG names, logos, visual identity, and trademarks are not granted by the software license. This repository is an independent Build Week prototype and does not include the contractual PINTAG MVP.
