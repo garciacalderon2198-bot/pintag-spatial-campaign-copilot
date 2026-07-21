@@ -163,3 +163,13 @@ These are requirements for the prototype and are not claims that implementation 
 - The complete demonstration can be performed in under three minutes.
 - No excluded capability or contractual PINTAG MVP integration is required to complete the demonstration.
 
+## Golden Pintag Drop Build Week extension
+
+PINTAG supports two activation modes on the shared spatial campaign engine:
+
+- `real-time-offer`: the merchant Sponsor Venue is both the discovery and redemption location.
+- `golden-pintag-drop`: a human-selected approved public Drop Zone is the discovery and simulated-search location, while the distinct Sponsor Venue is the redemption location.
+
+Golden mode uses the deterministic Machala catalog: Paseo Shopping Machala, Parque Juan Montalvo, and Plaza Colón. Catalog suitability descriptions are simulated prototype assumptions; final safety, permission, legal, and operational review remains mandatory. Arbitrary coordinates are not accepted.
+
+The Golden journey adds activation recommendation, Drop Zone selection, publication, simulated 2D discovery, simulated arrival and proximity, CSS-only simulated WebAR search, Golden Pintag find, claim, positive post-claim state, Sponsor Venue redemption, and prototype analytics. It does not add real geolocation, camera access, presence verification, real WebAR, safety verification, permission claims, traffic claims, sales-impact claims, or CAC claims.

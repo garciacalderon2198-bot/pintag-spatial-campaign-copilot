@@ -86,3 +86,14 @@ Target total: **2 minutes 40 seconds**, remaining under three minutes.
 | Review analytics and GPT-5.6 insight | 0:25 |
 | **Total** | **2:40** |
 
+## Golden Pintag Drop scenario
+
+Merchant need:
+
+> We want to use one chocolate cheesecake as a sponsored reward to introduce Homers Café to new customers in another part of Machala this Saturday.
+
+The merchant selects or receives the deterministic `golden-pintag-drop` recommendation, reviews the Sponsor Venue (`Homers Café — South Machala`), chooses one catalog Drop Zone, and approves publication. The consumer map shows the Drop Zone and Sponsor Venue as different simulated locations. The consumer simulates arrival, unlocks simulated proximity, starts the CSS-only **Simulated WebAR search**, finds the Golden Pintag, claims `PINTAG-4821`, and receives a 24-hour redemption instruction for the Sponsor Venue.
+
+The merchant sees a **Simulated merchant notification**, validates the code once, and reviews prototype session events. After claim, the public state reads: “This Golden Pintag has already been claimed. Keep exploring—another Drop may appear nearby.” No second claim is created.
+
+All map, location, movement, proximity, search, merchant identity, and user identity behavior is simulated. The flow does not verify presence, real safety, Drop Zone permission, traffic, sales impact, or CAC reduction.

@@ -114,3 +114,14 @@ Metrics must remain available when GPT-5.6 insight generation fails. The interfa
 ## Explicit exclusions
 
 The architecture does not include payments, production authentication, real merchant onboarding, background location, real fraud detection, full PINTAG social or community features, or integration with the contractual PINTAG MVP.
+
+## Golden Drop two-location boundary
+
+Both activation modes reuse deterministic publication, timing, inventory, claim, redemption code, single-use redemption, events, and metrics. Golden mode distinguishes:
+
+- **Drop Zone:** a human-selected entry from the fixed simulated approved catalog, used for public discovery and simulated search.
+- **Sponsor Venue:** the distinct simulated merchant location where deterministic redemption occurs.
+
+The provider may recommend or rank catalog IDs but cannot invent coordinates, select a Drop Zone on behalf of the human, declare safety or permission, verify traffic or physical presence, or enable geofencing. The browser requests neither geolocation nor camera permission. The 2D map, travel, proximity, and WebAR treatment are in-memory UI simulations, and their events are labeled as prototype session events.
+
+Golden claims additionally require publication, an available Drop, simulated proximity unlock, a found-state transition, remaining supply, and no prior session claim. The existing deterministic redemption engine remains authoritative. Insight inputs may include activation type, Drop Zone, Sponsor Venue, searches started, and Golden Pintags found, but every insight must disclaim verified movement, causal sales effect, and CAC results.
