@@ -7,6 +7,12 @@ merchant need → AI-generated campaign → spatial publication → user claim �
 
 ## Pre-existing PINTAG foundation
 
+Public evaluation links and evidence:
+
+- Public repository: https://github.com/garciacalderon2198-bot/pintag-spatial-campaign-copilot
+- Live deployment: https://pintag-spatial-campaign-copilot.vercel.app/
+- Codex Session ID: `019f8151-561f-7881-bdd2-a09f68112a1e`
+
 Before Build Week, PINTAG already had:
 - its Spatial Internet category thesis;
 - the Pintag object model;
@@ -23,13 +29,13 @@ An optional server-side Azure OpenAI integration layer targets `gpt-5.6-sol` thr
 
 ## Codex contribution log
 
-Codex created the documentation baseline, Next.js application foundation, deterministic campaign workflow, rule tests, Azure OpenAI integration boundary, structured validation, fallback behavior, and UI source disclosures in this repository.
+Under human review and direction, Codex helped initialize and structure the repository; write the documentation baseline, specifications, and architecture boundaries; build the Next.js interface; implement deterministic campaign, claim, redemption, event, and analytics rules; create and run tests; implement the server-side Azure OpenAI boundary, structured validation, and fallback behavior; perform security and secret scans; maintain Git commits; and prepare GitHub publication and Vercel deployment. Product and engineering decisions remained human-owned.
 
 ## GPT-5.6 usage log
 
 Azure OpenAI through Microsoft Foundry is the active provider target for GPT-5.6 Sol. Azure quota was requested and remains externally controlled. A successful live GPT-5.6 call has not yet been verified, and no live model output is presented as evidence.
 
-The application uses deterministic fallback for campaign generation and performance insight when Azure credentials, quota, deployment, network availability, timeout budget, or structured output validation prevent a live response.
+The public deployment currently uses the clearly labeled deterministic fallback for campaign generation and performance insight. The fallback also applies when Azure credentials, quota, deployment, network availability, timeout budget, or structured output validation prevent a live response.
 
 ## Human product and engineering decisions
 
@@ -43,15 +49,23 @@ The application uses deterministic fallback for campaign generation and performa
 
 Automated tests cover pre-publication claim rejection, single decrement of reward supply, single-use redemption, invalid redemption rejection, missing-Azure fallback, timeout fallback, invalid-model-output fallback, source labeling, secret non-disclosure, raw-error suppression, and invalid AI-route input.
 
+Final validation results:
+
+- `npm run lint` passes.
+- All 10 automated tests pass.
+- `npm run build` passes.
+- The complete public deterministic fallback flow has been verified.
+- No `.env.local`, credentials, real Azure endpoints, subscription IDs, resource IDs, or secrets are stored in Git.
+
 ## Submission checklist
 
-- [ ] Working project
-- [ ] GPT-5.6 integration
-- [ ] Codex contribution evidence
-- [ ] Public demo or testable deployment
-- [ ] Repository access configured
-- [ ] README setup instructions
-- [ ] Sample data
+- [x] Working project
+- [x] Optional GPT-5.6 provider layer with deterministic fallback
+- [x] Codex contribution evidence
+- [x] Public demo or testable deployment
+- [x] Repository access configured
+- [x] README setup instructions
+- [x] Sample data
 - [ ] Demo video under three minutes
-- [ ] Codex `/feedback` session ID
+- [x] Codex `/feedback` session ID
 - [ ] Devpost submission completed
